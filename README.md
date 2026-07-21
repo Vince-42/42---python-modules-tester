@@ -1,3 +1,5 @@
+_This project was made by vleroy to help test python module project for the 42 core curriculum._
+
 # Python Module Checker
 
 A command-line tool for validating student Python exercises across 9 modules covering basic Python, object-oriented programming, exception handling, collections, file I/O, abstract classes, import systems, design patterns, and environment management.
