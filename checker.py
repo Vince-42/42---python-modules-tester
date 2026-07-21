@@ -310,12 +310,16 @@ class Checker:
                     flake8_errors.extend(f_errors)
                     mypy_errors.extend(m_errors)
             
+            expected_mypy = ex_def.get("expected_mypy_errors", [])
+            if mypy_errors:
+                for expected in expected_mypy:
+                    mypy_errors = [e for e in mypy_errors if expected not in e]
+                if mypy_errors:
+                    result.passed = False
+                    result.errors.extend([f"mypy: {e}" for e in mypy_errors])
             if flake8_errors:
                 result.passed = False
                 result.errors.extend([f"flake8: {e}" for e in flake8_errors])
-            if mypy_errors:
-                result.passed = False
-                result.errors.extend([f"mypy: {e}" for e in mypy_errors])
             
         except Exception as e:
             result.passed = False

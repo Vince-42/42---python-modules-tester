@@ -195,7 +195,7 @@ def check_ex4(checker: Checker, result: ExerciseResult):
 EXERCISES = {
     0: {"name": "Agricultural Data Validation", "check": check_ex0},
     1: {"name": "Data Validation Pipeline", "check": check_ex1},
-    2: {"name": "Different Types of Problems", "check": check_ex2},
+    2: {"name": "Different Types of Problems", "check": check_ex2, "expected_mypy_errors": ["Unsupported operand types for + (\"str\" and \"int\")"]},
     3: {"name": "Making Your Own Error Types", "check": check_ex3},
     4: {"name": "Finally Block - Always Clean Up", "check": check_ex4},
 }
