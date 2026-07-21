@@ -243,4 +243,4 @@ The checker is designed to be extensible. To add or modify exercise validations:
 
 ## License
 
-[Your license here]
+MIT - Vincent Leroy
