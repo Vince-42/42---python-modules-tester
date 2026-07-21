@@ -311,9 +311,11 @@ class Checker:
                     mypy_errors.extend(m_errors)
             
             if flake8_errors:
-                result.warnings.extend([f"flake8: {e}" for e in flake8_errors])
+                result.passed = False
+                result.errors.extend([f"flake8: {e}" for e in flake8_errors])
             if mypy_errors:
-                result.warnings.extend([f"mypy: {e}" for e in mypy_errors])
+                result.passed = False
+                result.errors.extend([f"mypy: {e}" for e in mypy_errors])
             
         except Exception as e:
             result.passed = False
