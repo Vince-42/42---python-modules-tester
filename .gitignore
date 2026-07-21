@@ -1,0 +1,37 @@
+# OpenCode session data
+.omo/
+
+# CodeGraph index
+.codegraph/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Trace files generated during testing
+traces/
+
+# Sample solutions and fixtures
+student_sample/
+tests/
+
+# mypy cache
+.mypy_cache/
+
+# Virtual environments
+venv/
+matrix_env/
+
+# IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Environment variables
+.env
+
+# Subject PDFs (not needed for checker to run)
+*.pdf
