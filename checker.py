@@ -17,9 +17,12 @@ import subprocess
 import sys
 import tempfile
 import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+from tracing import ProcessInvocation, format_invocations
 
 
 @dataclass
@@ -36,6 +39,7 @@ class ExerciseResult:
     stdout: str = ""
     stderr: str = ""
     exit_code: int = 0
+    invocations: List[ProcessInvocation] = field(default_factory=list)
 
 
 @dataclass
@@ -65,7 +69,43 @@ class ExerciseRunner:
         self.env = os.environ.copy()
         # Ensure student packages can be imported
         self.env["PYTHONPATH"] = str(student_dir) + os.pathsep + self.env.get("PYTHONPATH", "")
-    
+        self._active_result: Optional[ExerciseResult] = None
+
+    @contextmanager
+    def record_into(self, result: Optional[ExerciseResult]):
+        """Route subsequent run_file invocations into the given result.
+
+        The previous active result is restored on exit, including when an
+        exception propagates, so recording is always scoped to the currently
+        checked exercise.
+        """
+        previous = self._active_result
+        self._active_result = result
+        try:
+            yield
+        finally:
+            self._active_result = previous
+
+    def _record(
+        self,
+        command: List[str],
+        cwd: str,
+        exit_code: int,
+        stdout: str,
+        stderr: str
+    ) -> None:
+        """Append a subprocess invocation to the active result, if any."""
+        if self._active_result is not None:
+            self._active_result.invocations.append(
+                ProcessInvocation(
+                    command=list(command),
+                    cwd=cwd,
+                    exit_code=exit_code,
+                    stdout=stdout,
+                    stderr=stderr,
+                )
+            )
+
     def run_file(
         self,
         file_path: Path,
@@ -76,31 +116,35 @@ class ExerciseRunner:
     ) -> Tuple[int, str, str]:
         """
         Run a Python file via subprocess.
-        
+
         Returns: (exit_code, stdout, stderr)
         """
-        if not file_path.exists():
-            return 1, "", f"File not found: {file_path}"
-        
         cmd = [sys.executable, str(file_path)]
         if args:
             cmd.extend(args)
-        
-        try:
-            result = subprocess.run(
-                cmd,
-                input=stdin,
-                capture_output=True,
-                text=True,
-                timeout=timeout or self.DEFAULT_TIMEOUT,
-                env=self.env,
-                cwd=str(cwd) if cwd else str(self.student_dir)
-            )
-            return result.returncode, result.stdout, result.stderr
-        except subprocess.TimeoutExpired:
-            return 124, "", "Execution timed out"
-        except Exception as e:
-            return 1, "", f"Execution error: {e}"
+        resolved_cwd = str(cwd) if cwd else str(self.student_dir)
+
+        if not file_path.exists():
+            code, stdout, stderr = 1, "", f"File not found: {file_path}"
+        else:
+            try:
+                result = subprocess.run(
+                    cmd,
+                    input=stdin,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout or self.DEFAULT_TIMEOUT,
+                    env=self.env,
+                    cwd=resolved_cwd
+                )
+                code, stdout, stderr = result.returncode, result.stdout, result.stderr
+            except subprocess.TimeoutExpired:
+                code, stdout, stderr = 124, "", "Execution timed out"
+            except Exception as e:
+                code, stdout, stderr = 1, "", f"Execution error: {e}"
+
+        self._record(cmd, resolved_cwd, code, stdout, stderr)
+        return code, stdout, stderr
     
     def run_code(
         self,
@@ -203,6 +247,7 @@ class TraceGenerator:
             result.stderr if result.stderr else "(empty)",
             "",
         ]
+        trace_lines.extend(format_invocations(result.invocations))
         
         if flake8_errors:
             trace_lines.extend([
@@ -300,7 +345,8 @@ class Checker:
         try:
             check_fn = ex_def.get("check")
             if check_fn:
-                check_fn(self, result)
+                with self.runner.record_into(result):
+                    check_fn(self, result)
             
             checked_files = list(dict.fromkeys(result.files_checked))
             for file_path_str in checked_files:
