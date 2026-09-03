@@ -11,6 +11,7 @@ from modules import (
     check_try_except_block,
     run_and_validate,
 )
+from modules.module03_achievement import check_ex3
 
 MODULE_NAME = "Module 3: Python Collections"
 
@@ -151,47 +152,6 @@ def check_ex2(checker: Checker, result: ExerciseResult):
         if not re.search(pattern, stdout):
             result.passed = False
             result.errors.append(f"Missing output pattern: {pattern}")
-
-
-def check_ex3(checker: Checker, result: ExerciseResult):
-    """Exercise 3: Achievement Hunter"""
-    file_path = "ex3/ft_achievement_tracker.py"
-    
-    check_function_exists(checker, result, file_path, "gen_player_achievements")
-    
-    if not result.passed:
-        return
-    
-    # Verify return type annotation is set[str]
-    full_path = checker.student_dir / file_path
-    try:
-        content = full_path.read_text()
-        tree = ast.parse(content)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == "gen_player_achievements":
-                if node.returns is None:
-                    result.passed = False
-                    result.errors.append("gen_player_achievements must have return type annotation")
-                break
-    except SyntaxError:
-        pass
-    
-    code, stdout, stderr = run_and_validate(
-        checker, result, file_path,
-        expected_patterns=[
-            r"Player\s+\w+:\s*\{",
-            r"All distinct achievements:",
-            r"Common achievements:",
-            r"Only\s+\w+\s+has:",
-            r"\w+\s+is missing:",
-        ]
-    )
-    
-    # Verify at least 4 players
-    player_lines = [line for line in stdout.split('\n') if re.search(r'Player\s+\w+:', line)]
-    if len(player_lines) < 4:
-        result.passed = False
-        result.errors.append(f"Expected at least 4 players, found {len(player_lines)}")
 
 
 def check_ex4(checker: Checker, result: ExerciseResult):
