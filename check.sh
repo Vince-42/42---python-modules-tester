@@ -9,7 +9,8 @@
 #   ./check.sh 3 2                 Check module 3, exercise 2
 #
 # Options:
-#   -d, --dir PATH       Student directory (default: current directory)
+#   -d, --dir PATH       Student directory (default: asked, Enter = current directory)
+#                        With 'all': point at the folder containing the moduleXX dirs
 #   -t, --trace-dir PATH Trace output directory (default: traces/)
 #   -v, --verbose        Show warnings and detailed output
 #   -h, --help           Show this help
@@ -66,6 +67,7 @@ done
 
 # --- argument parsing ---
 STUDENT_DIR="$PWD"
+DIR_GIVEN=""
 TRACE_DIR=""
 VERBOSE=""
 MODULE=""
@@ -78,7 +80,7 @@ while [[ $# -gt 0 ]]; do
         -v|--verbose) VERBOSE="--verbose"; shift ;;
         -d|--dir)
             [[ $# -lt 2 ]] && { err "--dir requires a path"; exit 1; }
-            STUDENT_DIR="$2"; shift 2 ;;
+            STUDENT_DIR="$2"; DIR_GIVEN=1; shift 2 ;;
         -t|--trace-dir)
             [[ $# -lt 2 ]] && { err "--trace-dir requires a path"; exit 1; }
             TRACE_DIR="$2"; shift 2 ;;
@@ -93,9 +95,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ ! -d "$STUDENT_DIR" ]]; then
-    err "student directory '$STUDENT_DIR' does not exist"
-    exit 1
+# --- ask for the submission directory unless --dir was given ---
+if [[ -z "$DIR_GIVEN" && -n "$MODULE" && "$MODULE" != "all" ]]; then
+    read -rp "Directory containing module $MODULE to check [$STUDENT_DIR]: " dir_answer
+    if [[ -n "$dir_answer" ]]; then
+        STUDENT_DIR="${dir_answer/#\~/$HOME}"
+    fi
 fi
 
 # --- interactive menu when no module was given ---
@@ -115,25 +120,76 @@ if [[ -z "$MODULE" ]]; then
         *) err "invalid module: $answer"; exit 1 ;;
     esac
 
-    if [[ "$MODULE" != "all" ]]; then
+    if [[ "$MODULE" == "all" ]]; then
+        if [[ -z "$DIR_GIVEN" ]]; then
+            read -rp "Directory containing the moduleXX folders [$STUDENT_DIR]: " dir_answer
+            if [[ -n "$dir_answer" ]]; then
+                STUDENT_DIR="${dir_answer/#\~/$HOME}"
+            fi
+        fi
+    else
+        if [[ -z "$DIR_GIVEN" ]]; then
+            read -rp "Directory containing module $MODULE to check [$STUDENT_DIR]: " dir_answer
+            if [[ -n "$dir_answer" ]]; then
+                STUDENT_DIR="${dir_answer/#\~/$HOME}"
+            fi
+        fi
         read -rp "Exercise (Enter for all): " ex_answer
         [[ -n "$ex_answer" ]] && EX="$ex_answer"
     fi
     echo
 fi
 
-# --- build the checker command ---
+if [[ ! -d "$STUDENT_DIR" ]]; then
+    err "student directory '$STUDENT_DIR' does not exist"
+    exit 1
+fi
+
+# --- all modules: run each moduleXX directory found ---
+if [[ "$MODULE" == "all" ]]; then
+    shopt -s nullglob
+    MODULE_DIRS=("$STUDENT_DIR"/module[0-9] "$STUDENT_DIR"/module[0-9][0-9])
+    shopt -u nullglob
+
+    if [[ ${#MODULE_DIRS[@]} -eq 0 ]]; then
+        err "no moduleXX directories found in '$STUDENT_DIR'"
+        err "checking all modules expects folders like module00/, module01/, ... (run a single module to use a flat exXX/ layout)"
+        exit 1
+    fi
+
+    OVERALL_STATUS=0
+    GRAND_PASSED=0
+    GRAND_TOTAL=0
+    OUT_FILE="$(mktemp "${TMPDIR:-/tmp}/module-check.XXXXXX")"
+    trap 'rm -f "$OUT_FILE"' EXIT
+    summary_re='OVERALL: ([0-9]+)/([0-9]+)'
+    for dir in "${MODULE_DIRS[@]}"; do
+        base="$(basename "$dir")"
+        num="${base#module}"
+        num=$((10#$num))
+        CMD=(python3 "$CHECKER" --student-dir "$dir" --module "$num")
+        [[ -n "$TRACE_DIR" ]] && CMD+=(--trace-dir "$TRACE_DIR")
+        [[ -n "$VERBOSE" ]] && CMD+=("$VERBOSE")
+        CMD+=(${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"})
+
+        printf '%srunning:%s %s\n\n' "$DIM" "$RESET" "${CMD[*]}"
+        "${CMD[@]}" | tee "$OUT_FILE" || OVERALL_STATUS=$?
+        if [[ "$(cat "$OUT_FILE")" =~ $summary_re ]]; then
+            GRAND_PASSED=$((GRAND_PASSED + BASH_REMATCH[1]))
+            GRAND_TOTAL=$((GRAND_TOTAL + BASH_REMATCH[2]))
+        fi
+    done
+    printf '\n%sGrand total:%s %d/%d exercises passed across %d module(s)\n' \
+        "$BOLD" "$RESET" "$GRAND_PASSED" "$GRAND_TOTAL" "${#MODULE_DIRS[@]}"
+    exit "$OVERALL_STATUS"
+fi
+
+# --- single module: flat exXX/ layout inside STUDENT_DIR ---
 CMD=(python3 "$CHECKER" --student-dir "$STUDENT_DIR")
 [[ -n "$TRACE_DIR" ]] && CMD+=(--trace-dir "$TRACE_DIR")
 [[ -n "$VERBOSE" ]] && CMD+=("$VERBOSE")
-
-if [[ "$MODULE" == "all" ]]; then
-    CMD+=(--all)
-else
-    CMD+=(--module "$MODULE")
-    [[ -n "$EX" ]] && CMD+=(--ex "$EX")
-fi
-# bash 3.2 (macOS default) errors on expanding an empty array under set -u
+CMD+=(--module "$MODULE")
+[[ -n "$EX" ]] && CMD+=(--ex "$EX")
 CMD+=(${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"})
 
 printf '%srunning:%s %s\n\n' "$DIM" "$RESET" "${CMD[*]}"

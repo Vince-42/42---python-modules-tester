@@ -58,6 +58,11 @@ For multi-file exercises (Modules 6, 7, 8), the structure follows the subject re
 - **Module 7**: `ex0/`, `ex1/`, `ex2/` packages with `__init__.py`, plus `battle.py`, `capacitor.py`, `tournament.py`
 - **Module 8**: `ex0/construct.py`, `ex1/loading.py` with `requirements.txt` and `pyproject.toml`, `ex2/oracle.py` with `.env.example` and `.gitignore`
 
+### Checking multiple modules at once
+
+- **One module** (`./check.sh 3` or `--module 3`): point the checker at the folder that directly contains that module's `exXX/` folders (flat layout).
+- **All modules** (`./check.sh all`): point the checker at the folder containing the per-module `module00/`, `module01/`, … `module08/` directories. The wrapper runs each `moduleXX/` directory it finds and prints a grand total at the end.
+
 ## Usage
 
 ### Quick Start (recommended)
