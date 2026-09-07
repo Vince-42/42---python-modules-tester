@@ -60,6 +60,20 @@ For multi-file exercises (Modules 6, 7, 8), the structure follows the subject re
 
 ## Usage
 
+### Quick Start (recommended)
+
+`check.sh` is a small wrapper that saves you from remembering the flags. Run it from anywhere — it finds `checker.py` on its own:
+
+```bash
+./check.sh              # interactive menu (pick a module, optionally an exercise)
+./check.sh all          # check all modules
+./check.sh 3            # check module 3
+./check.sh 3 2          # check module 3, exercise 2
+./check.sh 3 -v         # verbose output
+```
+
+The typical workflow: `cd` into the student's submission folder, then run `/path/to/check.sh 3`. It checks the current directory by default; point elsewhere with `-d/--dir PATH`. Any args after `--` are passed straight through to `checker.py`.
+
 ### Check a Single Module
 
 ```bash
