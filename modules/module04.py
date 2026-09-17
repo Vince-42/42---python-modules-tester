@@ -219,7 +219,7 @@ def check_ex3(checker: Checker, result: ExerciseResult):
             if isinstance(node, ast.FunctionDef) and node.name == "secure_archive":
                 # Check parameters
                 arg_names = [arg.arg for arg in node.args.args]
-                if len(arg_names) < 3:  # self + filename + action
+                if len(arg_names) < 3:  # filename, action, content
                     result.passed = False
                     result.errors.append("secure_archive must accept at least (filename, action)")
                 
@@ -244,33 +244,72 @@ def check_ex3(checker: Checker, result: ExerciseResult):
         f.write("[FRAGMENT 001] Digital preservation protocols established 2087\n")
         f.write("[FRAGMENT 002] Knowledge must survive the entropy wars\n")
         test_file = f.name
+        expected_content = Path(test_file).read_text()
     
     try:
-        # Test by importing and calling the function
+        # Probe the student's chosen action convention (subject permits int or str).
         student_dir = str(full_path.parent)
+        write_test_file = '/tmp/test_vault_write.txt'
         wrapper = f"""
 import sys
+import shutil
+import tempfile
 sys.path.insert(0, {repr(student_dir)})
 from ft_vault_security import secure_archive
 
-# Test read success
-result = secure_archive({repr(test_file)}, 'read')
-print(f"READ_RESULT: {{result}}")
+TEST_FILE = {repr(test_file)}
+EXPECTED = {repr(expected_content)}
+WRITE_PATH = {repr(write_test_file)}
 
-# Test read nonexistent
-result = secure_archive('/not/existing/file', 'read')
-print(f"READ_FAIL: {{result}}")
+probe_file = tempfile.mktemp(suffix='.txt')
+shutil.copy(TEST_FILE, probe_file)
 
-# Test write
-result = secure_archive('/tmp/test_vault_write.txt', 'write', 'test content')
-print(f"WRITE_RESULT: {{result}}")
+def find_actions():
+    # Common (read_action, write_action) conventions.
+    conventions = [('read', 'write'), (0, 1), (1, 0), (1, 2)]
+    for read_a, write_a in conventions:
+        try:
+            ok, data = secure_archive(probe_file, read_a)
+            if ok is True and data == EXPECTED:
+                ok2, _ = secure_archive(WRITE_PATH, write_a, 'test content')
+                if ok2 is True:
+                    return read_a, write_a
+        except Exception:
+            continue
+
+    # The default action may be read; then we only need a write action.
+    try:
+        ok, data = secure_archive(probe_file)
+        if ok is True and data == EXPECTED:
+            for write_a in ['write', 1, 0, 2]:
+                try:
+                    ok2, _ = secure_archive(WRITE_PATH, write_a, 'test content')
+                    if ok2 is True:
+                        return None, write_a
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    # Fallback to the documented string convention.
+    return 'read', 'write'
+
+read_action, write_action = find_actions()
+
+read_result = secure_archive(TEST_FILE) if read_action is None else secure_archive(TEST_FILE, read_action)
+fail_result = secure_archive('/not/existing/file') if read_action is None else secure_archive('/not/existing/file', read_action)
+write_result = secure_archive(WRITE_PATH, write_action, 'test content')
+
+print(f"READ_RESULT: {{read_result}}")
+print(f"READ_FAIL: {{fail_result}}")
+print(f"WRITE_RESULT: {{write_result}}")
 """
         code, stdout, stderr = checker.runner.run_code(wrapper)
         
         # Verify results
         read_success = re.search(r"READ_RESULT:\s*\((True|False),\s*(.+?)\)", stdout)
         read_fail = re.search(r"READ_FAIL:\s*\((True|False),\s*(.+?)\)", stdout)
-        write_result = re.search(r"WRITE_RESULT:\s*\((True|False),\s*(.+?)\)", stdout)
+        write_match = re.search(r"WRITE_RESULT:\s*\((True|False),\s*(.+?)\)", stdout)
         
         if not read_success or read_success.group(1) != "True":
             result.passed = False
@@ -280,11 +319,12 @@ print(f"WRITE_RESULT: {{result}}")
             result.passed = False
             result.errors.append("secure_archive should return (False, error) for failed read")
         
-        if not write_result:
+        if not write_match or write_match.group(1) != "True":
             result.passed = False
-            result.errors.append("secure_archive should return tuple for write operations")
+            result.errors.append("secure_archive should return (True, message) for successful write")
     finally:
         Path(test_file).unlink(missing_ok=True)
+        Path(write_test_file).unlink(missing_ok=True)
 
 
 EXERCISES = {
